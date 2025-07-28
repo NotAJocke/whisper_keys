@@ -1046,6 +1046,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a3d8a32ae18130a3c84dd492d4215c3d913c3b07c6b63c2eb3eb7ff1101ab7bf"
 
 [[package]]
+name = "engine"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "json5",
+ "kira",
+ "rayon",
+ "serde",
+]
+
+[[package]]
 name = "enum-map"
 version = "2.7.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1881,6 +1892,13 @@ dependencies = [
  "pest",
  "pest_derive",
  "serde",
+]
+
+[[package]]
+name = "key_listener"
+version = "0.1.0"
+dependencies = [
+ "rdev",
 ]
 
 [[package]]
@@ -3775,6 +3793,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "ui"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "engine",
+ "iced",
+]
+
+[[package]]
 name = "unicode-bidi"
 version = "0.3.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4185,19 +4212,6 @@ dependencies = [
  "bitflags 2.9.1",
  "js-sys",
  "web-sys",
-]
-
-[[package]]
-name = "whisper-keys-last"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "iced",
- "json5",
- "kira",
- "rayon",
- "rdev",
- "serde",
 ]
 
 [[package]]

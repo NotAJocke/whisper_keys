@@ -1,3 +1,5 @@
+use anyhow::Result;
+use kira::{AudioManagerSettings, DefaultBackend};
 use std::{
     sync::mpsc::{self, Receiver, Sender},
     thread,
@@ -12,6 +14,7 @@ pub enum AudioMessage {
     SetVolume(i32),
     ToggleMute,
     SetPack(Pack),
+    KeyPressed(String),
 }
 
 pub struct AudioManager {
@@ -23,16 +26,18 @@ struct AudioManagerActor {
     muted: bool,
     volume: i32,
     pack: Option<Pack>,
+    manager: kira::AudioManager,
 }
 
 impl AudioManagerActor {
-    pub fn new(rcv: Receiver<AudioMessage>) -> Self {
-        Self {
+    pub fn new(rcv: Receiver<AudioMessage>) -> Result<Self> {
+        Ok(Self {
             receiver: rcv,
             muted: false,
             volume: 50,
             pack: None,
-        }
+            manager: kira::AudioManager::<DefaultBackend>::new(AudioManagerSettings::default())?,
+        })
     }
 
     fn start(&mut self) {
@@ -43,6 +48,21 @@ impl AudioManagerActor {
                     AudioMessage::VolumeUp(v) => self.volume += v,
                     AudioMessage::VolumeDown(v) => self.volume -= v,
                     AudioMessage::SetVolume(v) => self.volume = v,
+                    AudioMessage::SetPack(pack) => self.pack = Some(pack),
+                    AudioMessage::KeyPressed(key) => {
+                        if self.muted {
+                            return;
+                        }
+
+                        if let Some(pack) = &self.pack {
+                            let sound_data = pack
+                                .keys
+                                .get(&key)
+                                .unwrap_or_else(|| pack.keys.get("unknown").unwrap());
+
+                            self.manager.play(sound_data.clone()).unwrap();
+                        }
+                    }
                 }
             }
         }
@@ -50,13 +70,13 @@ impl AudioManagerActor {
 }
 
 impl AudioManager {
-    pub fn new() -> Self {
+    pub fn new() -> Result<Self> {
         let (tx, rx) = mpsc::channel::<AudioMessage>();
-        let mut actor = AudioManagerActor::new(rx);
+        let mut actor = AudioManagerActor::new(rx)?;
 
         thread::spawn(move || actor.start());
 
-        Self { sender: tx }
+        Ok(Self { sender: tx })
     }
 
     pub fn send(&self, msg: AudioMessage) {

@@ -6,6 +6,7 @@ use std::{
     ffi::OsString,
     fs,
     path::{Path, PathBuf},
+    u32,
 };
 
 use anyhow::Result;
@@ -15,7 +16,7 @@ use kira::sound::static_sound::StaticSoundData;
 struct RawPack {
     creator: String,
     source: String,
-    default_volume: u32,
+    default_volume: String,
     keys: HashMap<String, String>,
 }
 
@@ -23,7 +24,7 @@ struct RawPack {
 pub struct Pack {
     name: String,
     default_volume: u32,
-    keys: HashMap<String, StaticSoundData>,
+    pub keys: HashMap<String, StaticSoundData>,
 }
 
 impl Pack {
@@ -50,7 +51,7 @@ impl Pack {
 
         let pack = Pack {
             name: pack_name.to_owned(),
-            default_volume: parsed_config.default_volume,
+            default_volume: parsed_config.default_volume.parse()?,
             keys: pack_keys,
         };
 
