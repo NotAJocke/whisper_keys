@@ -1,6 +1,8 @@
 use anyhow::Result;
-use kira::{AudioManagerSettings, DefaultBackend};
+use fastrand::Rng;
+use kira::{AudioManagerSettings, Decibels, DefaultBackend, Semitones, Value};
 use std::{
+    ffi::c_ulonglong,
     sync::mpsc::{self, Receiver, Sender},
     thread,
 };
@@ -9,9 +11,9 @@ use crate::pack::Pack;
 
 #[derive(Debug)]
 pub enum AudioMessage {
-    VolumeUp(i32),
-    VolumeDown(i32),
-    SetVolume(i32),
+    VolumeUp(u32),
+    VolumeDown(u32),
+    SetVolume(u32),
     ToggleMute,
     SetPack(Pack),
     KeyPressed(String),
@@ -24,9 +26,10 @@ pub struct AudioManager {
 struct AudioManagerActor {
     receiver: Receiver<AudioMessage>,
     muted: bool,
-    volume: i32,
+    volume: u32,
     pack: Option<Pack>,
     manager: kira::AudioManager,
+    rng: Rng,
 }
 
 impl AudioManagerActor {
@@ -37,6 +40,7 @@ impl AudioManagerActor {
             volume: 50,
             pack: None,
             manager: kira::AudioManager::<DefaultBackend>::new(AudioManagerSettings::default())?,
+            rng: Rng::new(),
         })
     }
 
@@ -48,17 +52,30 @@ impl AudioManagerActor {
                     AudioMessage::VolumeUp(v) => self.volume += v,
                     AudioMessage::VolumeDown(v) => self.volume -= v,
                     AudioMessage::SetVolume(v) => self.volume = v,
-                    AudioMessage::SetPack(pack) => self.pack = Some(pack),
+                    AudioMessage::SetPack(pack) => {
+                        self.volume = pack.default_volume;
+                        self.pack = Some(pack);
+                    }
                     AudioMessage::KeyPressed(key) => {
                         if self.muted {
                             return;
                         }
 
                         if let Some(pack) = &self.pack {
+                            // generates value in [-0.25, 0.25]
+                            let semitone_shift = self.rng.f64() * 0.5 - 0.25;
+
+                            // dB = 20 * log_10(Amplitude)
+                            let db = 20.0 * (self.volume as f32 * 0.01).log10();
+                            let db_variation = self.rng.f32() * 2.0 - 1.0; // random float in [-1.0, 1.0]
+                            let db = db + db_variation;
+
                             let sound_data = pack
                                 .keys
                                 .get(&key)
-                                .unwrap_or_else(|| pack.keys.get("unknown").unwrap());
+                                .unwrap_or_else(|| pack.keys.get("Unknown").unwrap())
+                                .volume(Decibels(db))
+                                .playback_rate(Semitones(semitone_shift));
 
                             self.manager.play(sound_data.clone()).unwrap();
                         }

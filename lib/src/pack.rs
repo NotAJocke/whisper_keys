@@ -29,8 +29,8 @@ struct RawPack {
 
 #[derive(Debug)]
 pub struct Pack {
-    name: String,
-    default_volume: u32,
+    pub name: String,
+    pub default_volume: u32,
     pub keys: HashMap<String, StaticSoundData>,
 }
 
@@ -153,7 +153,7 @@ pub fn from_mechvibes(path: &Path) -> Result<()> {
     let pack = RawPack {
         creator: String::new(),
         source: String::new(),
-        default_volume: "0".to_string(),
+        default_volume: "50".to_string(),
         keys,
     };
 
