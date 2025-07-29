@@ -6,6 +6,7 @@ use lib::{
     pack::Pack,
 };
 use std::path::PathBuf;
+use std::time::Duration;
 use std::{
     io::{BufRead, BufReader},
     process::{Command, Stdio},
@@ -33,15 +34,22 @@ fn main() -> Result<()> {
 
     audio_manager.send(AudioMessage::SetPack(pack));
 
+    let am = audio_manager.clone();
     thread::spawn(move || {
         for line in reader.lines() {
             let key = line.unwrap().trim().to_string();
 
-            audio_manager.send(AudioMessage::KeyPressed(key));
+            am.send(AudioMessage::KeyPressed(key));
         }
     });
 
     // iced::run("WhisperKeys", Counter::update, Counter::view)?;
+
+    std::thread::sleep(Duration::from_secs(15));
+
+    let pack = Pack::load_from(&packs_dir, "Mammoth75")?;
+    audio_manager.send(AudioMessage::SetPack(pack));
+    println!("Changed pack");
 
     std::thread::park();
 

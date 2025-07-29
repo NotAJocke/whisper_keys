@@ -1,8 +1,7 @@
 use anyhow::Result;
 use fastrand::Rng;
-use kira::{AudioManagerSettings, Decibels, DefaultBackend, Semitones, Value};
+use kira::{AudioManagerSettings, Decibels, DefaultBackend, Semitones};
 use std::{
-    ffi::c_ulonglong,
     sync::mpsc::{self, Receiver, Sender},
     thread,
 };
@@ -11,14 +10,13 @@ use crate::pack::Pack;
 
 #[derive(Debug)]
 pub enum AudioMessage {
-    VolumeUp(u32),
-    VolumeDown(u32),
     SetVolume(u32),
     ToggleMute,
     SetPack(Pack),
     KeyPressed(String),
 }
 
+#[derive(Clone)]
 pub struct AudioManager {
     sender: Sender<AudioMessage>,
 }
@@ -49,8 +47,6 @@ impl AudioManagerActor {
             if let Ok(msg) = self.receiver.recv() {
                 match msg {
                     AudioMessage::ToggleMute => self.muted = !self.muted,
-                    AudioMessage::VolumeUp(v) => self.volume += v,
-                    AudioMessage::VolumeDown(v) => self.volume -= v,
                     AudioMessage::SetVolume(v) => self.volume = v,
                     AudioMessage::SetPack(pack) => {
                         self.volume = pack.default_volume;
