@@ -1,7 +1,7 @@
 [package]
-name = "key_listener"
+name = "temp"
 version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-rdev = { workspace = true }
+lib = { path = "../lib" }

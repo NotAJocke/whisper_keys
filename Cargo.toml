@@ -3,7 +3,8 @@ resolver = "3"
 members = [
   "key_listener",
   "lib"
-, "ui"]
+, "temp", "ui"]
 
 [workspace.dependencies]
 anyhow = "1.0.98"
+rdev = { git = "https://github.com/rustdesk-org/rdev.git" }

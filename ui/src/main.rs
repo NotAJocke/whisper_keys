@@ -1,10 +1,11 @@
-use anyhow::{bail, Result};
-use iced::widget::{button, column, text, Column, Text};
+use anyhow::{Result, bail};
 use iced::Alignment;
+use iced::widget::{Column, Text, button, column, text};
 use lib::{
     audio_manager::{AudioManager, AudioMessage},
     pack::Pack,
 };
+use std::path::PathBuf;
 use std::{
     io::{BufRead, BufReader},
     process::{Command, Stdio},
@@ -27,7 +28,8 @@ fn main() -> Result<()> {
     };
 
     let packs_dir = home.join("WhisperKeys");
-    let pack = Pack::load_from(&packs_dir, "Mammoth75").unwrap();
+
+    let pack = Pack::load_from(&packs_dir, "apex-pro-tkl-v2_Akira").unwrap();
 
     audio_manager.send(AudioMessage::SetPack(pack));
 
@@ -39,7 +41,9 @@ fn main() -> Result<()> {
         }
     });
 
-    iced::run("WhisperKeys", Counter::update, Counter::view)?;
+    // iced::run("WhisperKeys", Counter::update, Counter::view)?;
+
+    std::thread::park();
 
     child.kill().expect("Failed to kill key_listener");
 

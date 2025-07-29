@@ -14,7 +14,7 @@ fn main() {
                 return;
             }
 
-            let key_str = format!("{:?}\n", key).to_lowercase();
+            let key_str = format!("{:?}\n", key);
             stdout().write_all(key_str.as_bytes()).unwrap();
             stdout().flush().unwrap();
 
