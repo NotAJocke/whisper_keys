@@ -73,7 +73,7 @@ impl Pack {
     }
 }
 
-pub fn list_installed(path: &PathBuf) -> Result<Vec<String>> {
+pub fn list_installed(path: &Path) -> Result<Vec<String>> {
     let items = fs::read_dir(path)?;
 
     let subdirs: Vec<OsString> = items

@@ -1,10 +1,8 @@
 use anyhow::{Result, bail};
-use iced::Alignment;
-use iced::widget::{Column, Text, button, column, text};
-use lib::{
-    audio_manager::{AudioManager, AudioMessage},
-    pack::Pack,
-};
+use iced::widget::{button, column, pick_list, row};
+use iced::{Element, Task};
+use lib::audio_manager::{AudioManager, AudioMessage};
+use std::path::PathBuf;
 use std::{
     io::{BufRead, BufReader},
     process::{Command, Stdio},
@@ -25,12 +23,7 @@ fn main() -> Result<()> {
     let Some(home) = std::env::home_dir() else {
         bail!("Couldn't get the user's home dir");
     };
-
     let packs_dir = home.join("WhisperKeys");
-
-    let pack = Pack::load_from(&packs_dir, "apex-pro-tkl-v2_Akira").unwrap();
-
-    audio_manager.send(AudioMessage::SetPack(pack));
 
     let am = audio_manager.clone();
     thread::spawn(move || {
@@ -47,46 +40,59 @@ fn main() -> Result<()> {
         }
     });
 
-    iced::run("WhisperKeys", Counter::update, Counter::view)?;
+    iced::application("WhisperKeys", WhisperKeys::update, WhisperKeys::view).run_with(
+        move || {
+            (
+                WhisperKeys {
+                    installed_packs: lib::pack::list_installed(&packs_dir).unwrap(),
+                    selected_pack: None,
+                    packs_path: packs_dir,
+                },
+                Task::none(),
+            )
+        },
+    )?;
 
     child.kill().expect("Failed to kill key_listener");
 
     Ok(())
 }
 
-#[derive(Default)]
-struct Counter {
-    value: i64,
+#[derive(Debug, Clone)]
+enum Message {
+    PackSelected(String),
+    PackListRefreshed,
 }
 
-impl Counter {
-    fn update(&mut self, message: Message) {
-        match message {
-            Message::Increment => self.value += 1,
-            Message::Decrement => self.value -= 1,
+#[derive(Default)]
+struct WhisperKeys {
+    installed_packs: Vec<String>,
+    selected_pack: Option<String>,
+    packs_path: PathBuf,
+}
+
+impl WhisperKeys {
+    fn update(&mut self, msg: Message) {
+        use Message::*;
+
+        match msg {
+            PackSelected(p) => self.selected_pack = Some(p),
+            PackListRefreshed => {
+                self.installed_packs =
+                    lib::pack::list_installed(&self.packs_path).unwrap_or_default()
+            }
         }
     }
 
-    fn view(&self) -> Column<'_, Message> {
-        let increment_btn = button("Increment").on_press(Message::Increment);
-        let counter = text(self.value);
-        let decrement_btn = button("Decrement").on_press(Message::Decrement);
+    fn view(&self) -> Element<'_, Message> {
+        let pick_list = pick_list(
+            self.installed_packs.clone(),
+            self.selected_pack.clone(),
+            Message::PackSelected,
+        )
+        .placeholder("Choose a pack");
+        let refresh_button = button("Refresh").on_press(Message::PackListRefreshed);
 
-        column![HelloWorld {}.view(), increment_btn, counter, decrement_btn]
-            .padding(20)
-            .align_x(Alignment::Center)
-    }
-}
-
-#[derive(Debug, Clone, Copy)]
-enum Message {
-    Increment,
-    Decrement,
-}
-
-struct HelloWorld {}
-impl HelloWorld {
-    fn view(&self) -> Text<'_> {
-        text("Hey !")
+        column![row![pick_list, refresh_button]].into()
     }
 }
