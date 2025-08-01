@@ -7,3 +7,5 @@ edition = "2024"
 lib = { path = "../lib" }
 iced = "0.13.1"
 anyhow = { workspace = true }
+rfd = "0.15.4"
+open = "5.3.2"

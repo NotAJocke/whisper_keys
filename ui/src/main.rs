@@ -67,6 +67,8 @@ enum Message {
     PackSelected(String),
     PackListRefreshed,
     VolumeChanged(u32),
+    TranslatePack,
+    OpenConfigsPath,
 }
 
 struct WhisperKeys {
@@ -103,6 +105,15 @@ impl WhisperKeys {
                 self.installed_packs =
                     lib::pack::list_installed(&self.packs_path).unwrap_or_default()
             }
+            TranslatePack => {
+                self.error_msg = None;
+                if let Some(folder) = rfd::FileDialog::new().pick_folder() {
+                    if let Err(e) = lib::pack::from_mechvibes(&folder) {
+                        self.error_msg = Some(e.to_string());
+                    }
+                }
+            }
+            OpenConfigsPath => open::that(self.packs_path.clone()).unwrap(),
         }
     }
 
@@ -129,6 +140,13 @@ impl WhisperKeys {
 
             column = column.push(row![volume_text, slider]);
         }
+
+        let mechvibes_translate =
+            button("Convert mechvibes config").on_press(Message::TranslatePack);
+
+        let open_folder = button("Open WhisperKeys folder").on_press(Message::OpenConfigsPath);
+
+        column = column.push(row![mechvibes_translate, open_folder]);
 
         column.into()
     }
