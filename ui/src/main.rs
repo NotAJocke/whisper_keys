@@ -1,5 +1,5 @@
 use anyhow::{Result, bail};
-use iced::widget::{Column, button, pick_list, text};
+use iced::widget::{Column, button, pick_list, row, slider, text};
 use iced::{Element, Task};
 use lib::audio_manager::{AudioManager, AudioMessage};
 use lib::pack::Pack;
@@ -50,6 +50,7 @@ fn main() -> Result<()> {
                     installed_packs: lib::pack::list_installed(&packs_dir).unwrap(),
                     selected_pack: None,
                     packs_path: packs_dir,
+                    volume: None,
                 },
                 Task::none(),
             )
@@ -65,6 +66,7 @@ fn main() -> Result<()> {
 enum Message {
     PackSelected(String),
     PackListRefreshed,
+    VolumeChanged(u32),
 }
 
 struct WhisperKeys {
@@ -73,6 +75,7 @@ struct WhisperKeys {
     selected_pack: Option<String>,
     packs_path: PathBuf,
     error_msg: Option<String>,
+    volume: Option<u32>,
 }
 
 impl WhisperKeys {
@@ -80,13 +83,20 @@ impl WhisperKeys {
         use Message::*;
 
         match msg {
+            VolumeChanged(v) => {
+                self.volume = Some(v);
+                self.audio_manager.send(AudioMessage::SetVolume(v));
+            }
             PackSelected(p) => {
                 self.error_msg = None;
                 match Pack::load_from(&self.packs_path, &p) {
-                    Ok(p) => self.audio_manager.send(AudioMessage::SetPack(p)),
+                    Ok(pack) => {
+                        self.selected_pack = Some(p);
+                        self.volume = Some(pack.default_volume);
+                        self.audio_manager.send(AudioMessage::SetPack(pack));
+                    }
                     Err(e) => self.error_msg = Some(e.to_string()),
                 }
-                self.selected_pack = Some(p);
             }
             PackListRefreshed => {
                 self.error_msg = None;
@@ -111,7 +121,14 @@ impl WhisperKeys {
         .placeholder("Choose a pack");
         let refresh_button = button("Refresh").on_press(Message::PackListRefreshed);
 
-        column = column.push(pick_list).push(refresh_button);
+        column = column.push(row![pick_list, refresh_button]);
+
+        if let Some(v) = self.volume {
+            let slider = slider(1..=100, v, Message::VolumeChanged);
+            let volume_text = text(format!("{v}%"));
+
+            column = column.push(row![volume_text, slider]);
+        }
 
         column.into()
     }
