@@ -5,8 +5,6 @@ use lib::{
     audio_manager::{AudioManager, AudioMessage},
     pack::Pack,
 };
-use std::path::PathBuf;
-use std::time::Duration;
 use std::{
     io::{BufRead, BufReader},
     process::{Command, Stdio},
@@ -37,21 +35,19 @@ fn main() -> Result<()> {
     let am = audio_manager.clone();
     thread::spawn(move || {
         for line in reader.lines() {
-            let key = line.unwrap().trim().to_string();
-
-            am.send(AudioMessage::KeyPressed(key));
+            match line {
+                Ok(key) => {
+                    am.send(AudioMessage::KeyPressed(key.trim().to_string()));
+                }
+                Err(err) => {
+                    eprintln!("Pipe from key_listener broke: {err}");
+                    break;
+                }
+            }
         }
     });
 
-    // iced::run("WhisperKeys", Counter::update, Counter::view)?;
-
-    std::thread::sleep(Duration::from_secs(15));
-
-    let pack = Pack::load_from(&packs_dir, "Mammoth75")?;
-    audio_manager.send(AudioMessage::SetPack(pack));
-    println!("Changed pack");
-
-    std::thread::park();
+    iced::run("WhisperKeys", Counter::update, Counter::view)?;
 
     child.kill().expect("Failed to kill key_listener");
 

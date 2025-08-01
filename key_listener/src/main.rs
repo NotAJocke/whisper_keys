@@ -15,8 +15,14 @@ fn main() {
             }
 
             let key_str = format!("{:?}\n", key);
-            stdout().write_all(key_str.as_bytes()).unwrap();
-            stdout().flush().unwrap();
+            if stdout().write_all(key_str.as_bytes()).is_err() {
+                // Pipe is broken, exit gracefully
+                return;
+            };
+            if stdout().flush().is_err() {
+                // Pipe is broken, exit gracefully
+                return;
+            }
 
             last_pressed_key = Some(key);
         }
