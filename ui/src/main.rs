@@ -51,6 +51,7 @@ fn main() -> Result<()> {
                     selected_pack: None,
                     packs_path: packs_dir,
                     volume: None,
+                    muted: false,
                 },
                 Task::none(),
             )
@@ -69,6 +70,7 @@ enum Message {
     VolumeChanged(u32),
     TranslatePack,
     OpenConfigsPath,
+    ToggleMute,
 }
 
 struct WhisperKeys {
@@ -78,6 +80,7 @@ struct WhisperKeys {
     packs_path: PathBuf,
     error_msg: Option<String>,
     volume: Option<u32>,
+    muted: bool,
 }
 
 impl WhisperKeys {
@@ -114,6 +117,10 @@ impl WhisperKeys {
                 }
             }
             OpenConfigsPath => open::that(self.packs_path.clone()).unwrap(),
+            ToggleMute => {
+                self.muted = !self.muted;
+                self.audio_manager.send(AudioMessage::ToggleMute);
+            }
         }
     }
 
@@ -134,11 +141,19 @@ impl WhisperKeys {
 
         column = column.push(row![pick_list, refresh_button]);
 
-        if let Some(v) = self.volume {
+        if let Some(v) = self.volume
+            && !self.muted
+        {
             let slider = slider(1..=100, v, Message::VolumeChanged);
             let volume_text = text(format!("{v}%"));
+            let mute = button("Mute").on_press(Message::ToggleMute);
 
-            column = column.push(row![volume_text, slider]);
+            column = column.push(row![volume_text, slider, mute]);
+        }
+
+        if self.muted {
+            let mute = button("Unmute").on_press(Message::ToggleMute);
+            column = column.push(mute);
         }
 
         let mechvibes_translate =

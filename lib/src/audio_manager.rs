@@ -54,7 +54,7 @@ impl AudioManagerActor {
                     }
                     AudioMessage::KeyPressed(key) => {
                         if self.muted {
-                            return;
+                            continue;
                         }
 
                         if let Some(pack) = &self.pack {
