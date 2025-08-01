@@ -3,7 +3,7 @@ use fastrand::Rng;
 use kira::{AudioManagerSettings, Decibels, DefaultBackend, Semitones};
 use std::{
     sync::mpsc::{self, Receiver, Sender},
-    thread,
+    thread::{self},
 };
 
 use crate::pack::Pack;
@@ -14,6 +14,7 @@ pub enum AudioMessage {
     ToggleMute,
     SetPack(Pack),
     KeyPressed(String),
+    Shutdown,
 }
 
 #[derive(Clone)]
@@ -25,6 +26,7 @@ struct AudioManagerActor {
     receiver: Receiver<AudioMessage>,
     muted: bool,
     volume: u32,
+    cached_db: f32,
     pack: Option<Pack>,
     manager: kira::AudioManager,
     rng: Rng,
@@ -39,43 +41,57 @@ impl AudioManagerActor {
             pack: None,
             manager: kira::AudioManager::<DefaultBackend>::new(AudioManagerSettings::default())?,
             rng: Rng::new(),
+            cached_db: 20.0 * 0.5_f32.log10(),
         })
     }
 
     fn start(&mut self) {
         loop {
-            if let Ok(msg) = self.receiver.recv() {
-                match msg {
-                    AudioMessage::ToggleMute => self.muted = !self.muted,
-                    AudioMessage::SetVolume(v) => self.volume = v,
-                    AudioMessage::SetPack(pack) => {
-                        self.volume = pack.default_volume;
-                        self.pack = Some(pack);
+            match self.receiver.recv() {
+                Ok(AudioMessage::ToggleMute) => self.muted = !self.muted,
+                Ok(AudioMessage::SetVolume(v)) => self.update_volume(v),
+                Ok(AudioMessage::SetPack(pack)) => {
+                    self.update_volume(pack.default_volume);
+                    self.pack = Some(pack);
+                }
+                Ok(AudioMessage::KeyPressed(key)) => {
+                    if !self.muted {
+                        self.handle_keypress(key);
                     }
-                    AudioMessage::KeyPressed(key) => {
-                        if self.muted {
-                            continue;
-                        }
+                }
+                Ok(AudioMessage::Shutdown) => break,
+                Err(_) => break,
+            }
+        }
+    }
 
-                        if let Some(pack) = &self.pack {
-                            // generates value in [-0.25, 0.25]
-                            let semitone_shift = self.rng.f64() * 0.5 - 0.25;
+    fn update_volume(&mut self, volume: u32) {
+        self.volume = volume;
 
-                            // dB = 20 * log_10(Amplitude)
-                            let db = 20.0 * (self.volume as f32 * 0.01).log10();
-                            let db_variation = self.rng.f32() * 2.0 - 1.0; // random float in [-1.0, 1.0]
-                            let db = db + db_variation;
+        // dB = 20 * log_10(Amplitude)
+        self.cached_db = 20.0 * (volume as f32 * 0.01).log10();
+    }
 
-                            let sound_data = pack
-                                .keys
-                                .get(&key)
-                                .unwrap_or_else(|| pack.keys.get("Unknown").unwrap())
-                                .volume(Decibels(db))
-                                .playback_rate(Semitones(semitone_shift));
+    fn handle_keypress(&mut self, key: String) {
+        if let Some(pack) = &self.pack {
+            // generates value in [-0.25, 0.25]
+            let semitone_shift = self.rng.f64() * 0.5 - 0.25;
+            let db_variation = self.rng.f32() * 2.0 - 1.0; // random float in [-1.0, 1.0]
+            let final_db = self.cached_db + db_variation;
 
-                            self.manager.play(sound_data.clone()).unwrap();
-                        }
-                    }
+            let sound_data = pack
+                .keys
+                .get(&key)
+                .or_else(|| pack.keys.get("Unknown"))
+                .map(|sound| {
+                    sound
+                        .volume(Decibels(final_db))
+                        .playback_rate(Semitones(semitone_shift))
+                });
+
+            if let Some(sound_data) = sound_data {
+                if let Err(e) = self.manager.play(sound_data) {
+                    eprintln!("Failed to play sound: {}", e);
                 }
             }
         }
@@ -92,7 +108,12 @@ impl AudioManager {
         Ok(Self { sender: tx })
     }
 
-    pub fn send(&self, msg: AudioMessage) {
-        self.sender.send(msg).unwrap();
+    pub fn shutdown(self) {
+        self.sender.send(AudioMessage::Shutdown).unwrap();
+    }
+
+    pub fn send(&self, msg: AudioMessage) -> Result<()> {
+        self.sender.send(msg)?;
+        Ok(())
     }
 }

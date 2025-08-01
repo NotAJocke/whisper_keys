@@ -1,7 +1,7 @@
-use rdev::{EventType, Key};
+use rdev::{EventType, Key, ListenError};
 use std::io::{Write, stdout};
 
-fn main() {
+fn main() -> Result<(), ListenError> {
     let mut last_pressed_key: Option<Key> = None;
     let mut last_event: Option<EventType> = None;
 
@@ -14,13 +14,12 @@ fn main() {
                 return;
             }
 
-            let key_str = format!("{:?}\n", key);
-            if stdout().write_all(key_str.as_bytes()).is_err() {
-                // Pipe is broken, exit gracefully
+            let mut stdout = stdout();
+            if write!(stdout, "{:?}\n", key).is_err() {
                 return;
-            };
-            if stdout().flush().is_err() {
-                // Pipe is broken, exit gracefully
+            }
+
+            if stdout.flush().is_err() {
                 return;
             }
 
@@ -28,6 +27,7 @@ fn main() {
         }
 
         last_event = Some(event.event_type);
-    })
-    .unwrap();
+    })?;
+
+    Ok(())
 }

@@ -1,23 +1,11 @@
-use anyhow::{Context, anyhow, bail};
+use anyhow::Context;
 use rayon::prelude::*;
 use rdev::Key;
 use serde::{Deserialize, Serialize};
-use std::{
-    collections::HashMap,
-    ffi::OsString,
-    fs,
-    path::{Path, PathBuf},
-    u32,
-};
+use std::{collections::HashMap, fs, path::Path};
 
 use anyhow::Result;
 use kira::sound::static_sound::StaticSoundData;
-
-#[derive(Deserialize)]
-struct MechvibesPack {
-    name: String,
-    defines: HashMap<String, Option<String>>,
-}
 
 #[derive(Serialize, Deserialize)]
 struct RawPack {
@@ -36,14 +24,11 @@ pub struct Pack {
 
 impl Pack {
     pub fn load_from(folder: &Path, pack_name: &str) -> Result<Self> {
-        let path = Path::new(&folder).join(pack_name);
-        let config = match fs::read_to_string(path.join("config.json5")) {
-            Ok(config) => config,
-            Err(_) => fs::read_to_string(path.join("config.json"))
-                .with_context(|| format!("No config file at path {}", path.display()))?,
-        };
-        let parsed_config: RawPack =
-            json5::from_str(&config).map_err(|e| anyhow!("Invalid configuration file: {e}"))?;
+        let path = folder.join(pack_name);
+
+        let config = Self::read_config_file(&path)?;
+        let parsed_config: RawPack = json5::from_str(&config)
+            .with_context(|| format!("Invalid configuration file in {}", path.display()))?;
 
         let pack_keys = parsed_config
             .keys
@@ -51,74 +36,74 @@ impl Pack {
             .map(|(key, value)| {
                 let filepath = path.join(value);
 
-                let sound_data =
-                    StaticSoundData::from_file(filepath.as_path()).with_context(|| {
-                        format!(
-                            "Failed to load sound for key '{key}' from '{}'",
-                            filepath.as_path().display()
-                        )
-                    })?;
+                let sound_data = StaticSoundData::from_file(&filepath).with_context(|| {
+                    format!(
+                        "Failed to load sound for key '{key}' from '{}'",
+                        filepath.display()
+                    )
+                })?;
 
-                Ok((key.into(), sound_data))
+                Ok((key.to_owned(), sound_data))
             })
-            .collect::<anyhow::Result<_>>()?;
+            .collect::<Result<HashMap<_, _>>>()?;
 
-        let pack = Pack {
+        let default_volume = parsed_config.default_volume.parse().with_context(|| {
+            format!("Invalid default_volume: '{}'", parsed_config.default_volume)
+        })?;
+
+        Ok(Pack {
             name: pack_name.to_owned(),
-            default_volume: parsed_config.default_volume.parse()?,
+            default_volume,
             keys: pack_keys,
-        };
+        })
+    }
 
-        Ok(pack)
+    fn read_config_file(path: &Path) -> Result<String> {
+        fs::read_to_string(path.join("config.json5"))
+            .or_else(|_| fs::read_to_string(path.join("config.json")))
+            .with_context(|| format!("No config file found at path {}", path.display()))
     }
 }
 
 pub fn list_installed(path: &Path) -> Result<Vec<String>> {
-    let items = fs::read_dir(path)?;
+    let entries = fs::read_dir(path)
+        .with_context(|| format!("Failed to read directory: {}", path.display()))?;
 
-    let subdirs: Vec<OsString> = items
-        .filter_map(|d| {
-            let entry = d.ok()?;
-            let path = entry.path();
-            if path.is_dir() {
-                Some(entry.file_name())
-            } else {
-                None
-            }
-        })
-        .collect();
+    let mut packs = Vec::new();
 
-    let mut packs: Vec<String> = Vec::new();
-    for dir in &subdirs {
-        let path = Path::new(&path).join(dir);
-        let files = fs::read_dir(&path).unwrap();
-        let filesnames = files
-            .filter_map(|f| {
-                let entry = f.ok()?;
-                let path = entry.path();
-                if path.is_file() {
-                    Some(entry.file_name())
-                } else {
-                    None
-                }
-            })
-            .collect::<Vec<OsString>>();
-        let has_config_file = filesnames.contains(&OsString::from("config.json"))
-            || filesnames.contains(&OsString::from("config.json5"));
-        if has_config_file {
-            packs.push(dir.to_str().unwrap().to_owned());
+    for entry in entries {
+        let entry = entry.with_context(|| "Failed to read directory entry")?;
+        let entry_path = entry.path();
+
+        if !entry_path.is_dir() {
+            continue;
+        }
+
+        // Check if directory contains a config file
+        if has_config_file(&entry_path)? {
+            let dir_name = entry.file_name();
+            let pack_name = dir_name.to_string_lossy().into_owned();
+            packs.push(pack_name);
         }
     }
 
     Ok(packs)
 }
 
+fn has_config_file(dir_path: &Path) -> Result<bool> {
+    Ok(dir_path.join("config.json5").exists() || dir_path.join("config.json").exists())
+}
+
 pub fn from_mechvibes(path: &Path) -> Result<()> {
+    #[derive(Deserialize)]
+    struct MechvibesPack {
+        defines: HashMap<String, Option<String>>,
+    }
+
     let config_path = path.join("config.json");
 
-    let Ok(config) = fs::read_to_string(&config_path) else {
-        bail!("Config file not found at path '{}'", path.display());
-    };
+    let config = fs::read_to_string(&config_path)
+        .with_context(|| format!("Config file not found at path '{}'", path.display()))?;
 
     let parsed: MechvibesPack = serde_json::from_str(&config)
         .with_context(|| format!("Config at path '{}' is not valid", path.display()))?;
@@ -157,10 +142,14 @@ pub fn from_mechvibes(path: &Path) -> Result<()> {
         keys,
     };
 
-    let serialized = serde_json::to_string_pretty(&pack)?;
+    let serialized =
+        serde_json::to_string_pretty(&pack).context("Failed to serialize pack configuration")?;
 
-    fs::rename(&config_path, config_path.with_extension("json.bak"))?;
-    fs::write(path.join("config.json5"), serialized)?;
+    let backup_path = config_path.with_extension("json.bak");
+    fs::rename(&config_path, &backup_path)
+        .with_context(|| format!("Failed to create backup at {}", backup_path.display()))?;
+
+    fs::write(path.join("config.json5"), serialized).context("Failed to write new config file")?;
 
     Ok(())
 }
