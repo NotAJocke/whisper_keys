@@ -35,7 +35,7 @@ pub struct Pack {
 }
 
 impl Pack {
-    pub fn load_from(folder: &PathBuf, pack_name: &str) -> Result<Self> {
+    pub fn load_from(folder: &Path, pack_name: &str) -> Result<Self> {
         let path = Path::new(&folder).join(pack_name);
         let config = match fs::read_to_string(path.join("config.json5")) {
             Ok(config) => config,
