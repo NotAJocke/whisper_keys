@@ -1,14 +1,22 @@
 use anyhow::{Context, Result};
-use iced::widget::{Column, button, pick_list, row, slider, text};
-use iced::{Element, Task};
+use iced::advanced::text::Renderer;
+use iced::border::Radius;
+use iced::daemon::Appearance;
+use iced::widget::pick_list::Style;
+use iced::widget::slider::HandleShape;
+use iced::widget::{Column, Space, button, column, container, pick_list, row, slider, text};
+use iced::{Alignment, Background, Border, Color, Element, Length, Padding, Shadow, Size, Task};
 use lib::audio_manager::{AudioManager, AudioMessage};
-use lib::pack::Pack;
+use lib::pack::{self, Pack};
+use std::any::Any;
 use std::path::PathBuf;
 use std::{
     io::{BufRead, BufReader},
     process::{Command, Stdio},
     thread,
 };
+
+mod style;
 
 fn main() -> Result<()> {
     let mut child = Command::new("./target/release/key_listener")
@@ -49,9 +57,17 @@ fn main() -> Result<()> {
         eprintln!("Failed to load initial packs: {}", e);
         Vec::new()
     });
+    let installed_packs = format_pack_list(installed_packs);
 
-    iced::application("WhisperKeys", WhisperKeys::update, WhisperKeys::view).run_with(
-        move || {
+    iced::application("", WhisperKeys::update, WhisperKeys::view)
+        .level(iced::window::Level::AlwaysOnTop)
+        .resizable(false)
+        .window_size(Size::new(400.0, 600.0))
+        .style(|_, _| Appearance {
+            background_color: Color::parse("#2E2E2E").unwrap(),
+            text_color: Color::WHITE,
+        })
+        .run_with(move || {
             (
                 WhisperKeys {
                     audio_manager,
@@ -64,8 +80,7 @@ fn main() -> Result<()> {
                 },
                 Task::none(),
             )
-        },
-    )?;
+        })?;
 
     child.kill().expect("Failed to kill key_listener");
 
@@ -118,8 +133,8 @@ impl WhisperKeys {
             }
             PackListRefreshed => {
                 self.error_msg = None;
-                self.installed_packs =
-                    lib::pack::list_installed(&self.packs_path).unwrap_or_default()
+                let packs = lib::pack::list_installed(&self.packs_path).unwrap_or_default();
+                self.installed_packs = format_pack_list(packs);
             }
             TranslatePack => {
                 self.error_msg = None;
@@ -144,42 +159,135 @@ impl WhisperKeys {
     }
 
     fn view(&self) -> Element<'_, Message> {
-        let mut column = Column::new();
+        container(
+            Column::new()
+                .push_maybe(self.error_display())
+                .push(self.header())
+                .push(Space::with_height(15))
+                .push(self.pack_selection())
+                .push_maybe((self.volume.is_some()).then_some(Space::with_height(15)))
+                .push_maybe(self.volume_control())
+                .push(Space::with_height(15))
+                .push(self.utils_buttons()),
+        )
+        .width(Length::Fill)
+        .height(Length::Fill)
+        .padding(Padding {
+            top: 25.0,
+            bottom: 25.0,
+            right: 15.0,
+            left: 15.0,
+        })
+        .into()
+    }
 
-        // Error display
-        if let Some(e) = &self.error_msg {
-            column = column.push(text(format!("Error: {}", e)));
-        }
+    fn error_display(&self) -> Option<Element<'_, Message>> {
+        let error_msg = self.error_msg.as_ref()?;
+        let error_text = text(format!("Error: {}", error_msg)).color(style::ERROR_COLOR);
 
-        // Pack selection
+        Some(container(error_text).center_x(Length::Fill).into())
+    }
+
+    fn header(&self) -> Element<'_, Message> {
+        let title = text("WhisperKeys").size(28);
+
+        container(title)
+            .width(Length::Fill)
+            .align_x(Alignment::Center)
+            .into()
+    }
+
+    fn pack_selection(&self) -> Element<'_, Message> {
         let pick_list = pick_list(
             self.installed_packs.clone(),
             self.selected_pack.clone(),
             Message::PackSelected,
         )
-        .placeholder("Choose a pack");
+        .placeholder("Choose a pack")
+        .padding(Padding::default().right(10).left(10).top(10).bottom(10))
+        .style(style::picklist());
 
-        let refresh_button = button("Refresh").on_press(Message::PackListRefreshed);
-        column = column.push(row![pick_list, refresh_button]);
+        let refresh_button = button("Refresh")
+            .on_press(Message::PackListRefreshed)
+            .style(style::refresh_btn());
 
-        // Volume control
-        if let Some(v) = self.volume {
-            if !self.muted {
-                let slider = slider(1..=100, v, Message::VolumeChanged);
-                let volume_text = text(format!("Volume: {}%", v));
-                let mute_button = button("Mute").on_press(Message::ToggleMute);
-                column = column.push(row![volume_text, slider, mute_button]);
-            } else {
-                let unmute_button = button("Unmute").on_press(Message::ToggleMute);
-                column = column.push(unmute_button);
-            }
+        let pack_selection = container(column!(pick_list, refresh_button).align_x(Alignment::End))
+            .width(Length::Fill)
+            .align_x(Alignment::Center);
+
+        pack_selection.into()
+    }
+
+    fn volume_control(&self) -> Option<Element<'_, Message>> {
+        let volume = self.volume?;
+
+        let volume_text = text(format!("{}%", volume));
+        let mut slider = slider(1..=100, volume, Message::VolumeChanged)
+            .style(style::volume_slider())
+            .step(10u32);
+
+        if self.muted {
+            slider = slider.style(style::volume_slider_muted());
         }
 
-        let mechvibes_translate =
-            button("Convert mechvibes config").on_press(Message::TranslatePack);
-        let open_folder = button("Open WhisperKeys folder").on_press(Message::OpenConfigsPath);
+        let mute_button = if self.muted {
+            button("Unmute")
+                .on_press(Message::ToggleMute)
+                .style(style::generic_button())
+        } else {
+            button("Mute")
+                .on_press(Message::ToggleMute)
+                .style(style::generic_button())
+        };
 
-        column = column.push(row![mechvibes_translate, open_folder]);
-        column.into()
+        Some(
+            row![
+                volume_text,
+                Space::with_width(10),
+                slider,
+                Space::with_width(10),
+                mute_button
+            ]
+            .align_y(Alignment::Center)
+            .into(),
+        )
     }
+
+    fn utils_buttons(&self) -> Element<'_, Message> {
+        let from_mechvibes = button(text("Convert mechvibes config").align_x(Alignment::Center))
+            .on_press(Message::TranslatePack)
+            .width(Length::Fixed(200.0))
+            .style(style::generic_button());
+
+        let open_folder = button(text("Open WhisperKeys folder").align_x(Alignment::Center))
+            .on_press(Message::OpenConfigsPath)
+            .width(Length::Fixed(200.0))
+            .style(style::generic_button());
+
+        let create_pack = button(text("Create new empty pack").align_x(Alignment::Center))
+            .width(Length::Fixed(200.0))
+            .style(style::generic_button());
+
+        column![from_mechvibes, open_folder, create_pack]
+            .spacing(6)
+            .width(Length::Fill)
+            .align_x(Alignment::Center)
+            .into()
+    }
+}
+
+fn format_pack_list(packs: Vec<String>) -> Vec<String> {
+    packs
+        .into_iter()
+        .map(|p| {
+            if p.len() > 28 {
+                let mut s = String::with_capacity(28 + 3);
+                s.extend(p.chars().take(28));
+                s.push_str("…");
+                s
+            } else {
+                p
+            }
+        })
+        .collect()
 }
