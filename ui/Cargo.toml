@@ -13,4 +13,4 @@ open = "5.3.2"
 [package.metadata.bundle]
 name = "WhisperKeys"
 identifier = "dev.jocke.whisper_keys"
-resources = ["helper/key_listener"]
+resources = ["./key_listener"]

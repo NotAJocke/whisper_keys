@@ -1,14 +1,9 @@
 use anyhow::{Context, Result};
-use iced::advanced::text::Renderer;
-use iced::border::Radius;
 use iced::daemon::Appearance;
-use iced::widget::pick_list::Style;
-use iced::widget::slider::HandleShape;
 use iced::widget::{Column, Space, button, column, container, pick_list, row, slider, text};
-use iced::{Alignment, Background, Border, Color, Element, Length, Padding, Shadow, Size, Task};
+use iced::{Alignment, Color, Element, Length, Padding, Size, Task};
 use lib::audio_manager::{AudioManager, AudioMessage};
-use lib::pack::{self, Pack};
-use std::any::Any;
+use lib::pack::Pack;
 use std::path::PathBuf;
 use std::{
     io::{BufRead, BufReader},
@@ -18,8 +13,37 @@ use std::{
 
 mod style;
 
+fn helper_path() -> PathBuf {
+    let self_path = std::env::current_exe().unwrap();
+
+    if cfg!(debug_assertions) {
+        return self_path
+            .parent()
+            .unwrap()
+            .parent()
+            .unwrap()
+            .join("target/release/key_listener");
+    }
+
+    if cfg!(target_os = "macos") {
+        self_path
+            .parent()
+            .unwrap()
+            .parent()
+            .unwrap()
+            .join("Resources")
+            .join("key_listener")
+    } else {
+        panic!(
+            "Unsupported platform, only macOS is supported for now, please open an issue on GitHub if you want to see support for other platforms"
+        );
+    }
+}
+
 fn main() -> Result<()> {
-    let mut child = Command::new("./target/release/key_listener")
+    let helper_path = helper_path();
+
+    let mut child = Command::new(helper_path)
         .stdout(Stdio::piped())
         .spawn()
         .expect("Failed to launch helper");
@@ -64,7 +88,7 @@ fn main() -> Result<()> {
         .resizable(false)
         .window_size(Size::new(400.0, 600.0))
         .style(|_, _| Appearance {
-            background_color: Color::parse("#2E2E2E").unwrap(),
+            background_color: *style::BACKGROUND_COLOR,
             text_color: Color::WHITE,
         })
         .run_with(move || {
