@@ -15,7 +15,7 @@ fn main() -> Result<(), ListenError> {
             }
 
             let mut stdout = stdout();
-            if write!(stdout, "{:?}\n", key).is_err() {
+            if writeln!(stdout, "{:?}", key).is_err() {
                 return;
             }
 
