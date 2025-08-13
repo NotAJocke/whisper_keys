@@ -119,6 +119,7 @@ enum Message {
     TranslatePack,
     OpenConfigsPath,
     ToggleMute,
+    CreateNewPack,
 }
 
 struct WhisperKeys {
@@ -177,6 +178,18 @@ impl WhisperKeys {
                 self.muted = !self.muted;
                 if let Err(e) = self.audio_manager.send(AudioMessage::ToggleMute) {
                     self.error_msg = Some(format!("Failed to toggle mute: {}", e));
+                }
+            }
+            CreateNewPack => {
+                self.error_msg = None;
+                if let Some(folder) = rfd::FileDialog::new().pick_folder() {
+                    if let Err(e) = lib::pack::create_new_pack(&folder) {
+                        self.error_msg = Some(format!("Failed to create new pack: {}", e));
+                    }
+
+                    if let Err(e) = open::that(folder) {
+                        self.error_msg = Some(format!("Failed to open folder: {}", e))
+                    }
                 }
             }
         }
@@ -289,6 +302,7 @@ impl WhisperKeys {
             .style(style::generic_button());
 
         let create_pack = button(text("Create new empty pack").align_x(Alignment::Center))
+            .on_press(Message::CreateNewPack)
             .width(Length::Fixed(200.0))
             .style(style::generic_button());
 

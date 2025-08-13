@@ -65,6 +65,39 @@ impl Pack {
     }
 }
 
+/// Create a new pack folder inside `base_path` and populate it with a default
+/// `config.json5` copied from the embedded template.
+pub fn create_new_pack(base_path: &Path) -> Result<()> {
+    // Find an available folder name: "New pack", "New pack (2)", ...
+    let mut folder_name = String::from("New pack");
+    let mut candidate_path = base_path.join(&folder_name);
+    let mut counter: u32 = 1;
+
+    while candidate_path.exists() {
+        counter += 1;
+        folder_name = format!("New pack ({counter})");
+        candidate_path = base_path.join(&folder_name);
+    }
+
+    fs::create_dir_all(&candidate_path).with_context(|| {
+        format!(
+            "Failed to create pack directory at {}",
+            candidate_path.display()
+        )
+    })?;
+
+    // Embed the template at compile time and write it as config.json5
+    let template_contents = include_str!("config_template.json5");
+    fs::write(candidate_path.join("config.json5"), template_contents).with_context(|| {
+        format!(
+            "Failed to write config.json5 into {}",
+            candidate_path.display()
+        )
+    })?;
+
+    Ok(())
+}
+
 pub fn list_installed(path: &Path) -> Result<Vec<String>> {
     let entries = fs::read_dir(path)
         .with_context(|| format!("Failed to read directory: {}", path.display()))?;
