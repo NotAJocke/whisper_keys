@@ -2,8 +2,9 @@
 resolver = "3"
 members = [
   "key_listener",
-  "lib"
-, "temp", "ui"]
+  "lib",
+  "ui"
+]
 
 [workspace.dependencies]
 anyhow = "1.0.98"
