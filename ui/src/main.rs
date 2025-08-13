@@ -22,7 +22,7 @@ fn helper_path() -> PathBuf {
             .unwrap()
             .parent()
             .unwrap()
-            .join("target/release/key_listener");
+            .join("release/key_listener");
     }
 
     if cfg!(target_os = "macos") {
